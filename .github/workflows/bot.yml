@@ -1,0 +1,62 @@
+name: bot
+
+on:
+  # cron-job.org هر چند دقیقه اینو صدا می‌زنه
+  workflow_dispatch:
+  # پشتیبان، اگه cron-job.org یه وقت کار نکرد
+  schedule:
+    - cron: "*/30 * * * *"
+
+# هیچ‌وقت دو تا اجرا همزمان نباشن، وگرنه پیام‌ها دوبار پردازش می‌شن
+concurrency:
+  group: bot
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -r requirements.txt
+
+      # فایل رمزشده‌ی پیام‌ها تو شاخه‌ی جداگونه‌ی bot-data نگه داشته می‌شه
+      - name: Load data
+        run: |
+          if git fetch --depth 1 origin bot-data 2>/dev/null; then
+            git show FETCH_HEAD:state.enc > state.enc
+          else
+            echo "no data yet (first run)"
+          fi
+          sha256sum state.enc 2>/dev/null > before.sha || true
+
+      - name: Run bot
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DATA_KEY: ${{ secrets.DATA_KEY }}
+        run: python bot.py
+
+      # فقط یه commit نگه می‌داریم (force push) تا ریپو بزرگ نشه
+      - name: Save data
+        run: |
+          if [ -f state.enc ] && ! sha256sum -c before.sha >/dev/null 2>&1; then
+            git config user.name "chishod-bot"
+            git config user.email "chishod-bot@users.noreply.github.com"
+            git checkout --orphan bot-data-tmp
+            git rm -rf --cached . >/dev/null
+            git add -f state.enc
+            git commit -q -m "data"
+            git push -q -f origin bot-data-tmp:bot-data
+          else
+            echo "data unchanged"
+          fi
