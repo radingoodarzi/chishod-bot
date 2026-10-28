@@ -26,9 +26,9 @@ import time
 import requests
 from cryptography.fernet import Fernet, InvalidToken
 
-TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-DATA_KEY = os.environ.get("DATA_KEY", "")
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN", "").strip()
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
+DATA_KEY = os.environ.get("DATA_KEY", "").strip()
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-flash-latest")
 # اگه مدل اصلی سهمیه‌اش پر شد یا در دسترس نبود، اینو امتحان می‌کنه
 GEMINI_FALLBACK_MODEL = os.environ.get("GEMINI_FALLBACK_MODEL", "gemini-flash-lite-latest")
@@ -101,6 +101,9 @@ def tg(method, **params):
         timeout=30,
     )
     data = r.json()
+    if r.status_code in (401, 404):
+        sys.exit("TELEGRAM_TOKEN اشتباهه. توکن کامل رو از BotFather کپی کن "
+                 "(شکلش اینه: 1234567890:AAH...).")
     if not data.get("ok"):
         raise RuntimeError(f"Telegram {method} failed: {data.get('description')}")
     return data["result"]
