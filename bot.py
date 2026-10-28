@@ -259,15 +259,18 @@ def format_transcript(messages):
 
 
 def gemini(model, system, prompt):
-    r = requests.post(
-        f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-        headers={"x-goog-api-key": GEMINI_API_KEY},
-        json={
-            "system_instruction": {"parts": [{"text": system}]},
-            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
-        },
-        timeout=120,
-    )
+    try:
+        r = requests.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+            headers={"x-goog-api-key": GEMINI_API_KEY},
+            json={
+                "system_instruction": {"parts": [{"text": system}]},
+                "contents": [{"role": "user", "parts": [{"text": prompt}]}],
+            },
+            timeout=60,
+        )
+    except requests.RequestException as e:  # تایم‌اوت یا قطعی شبکه
+        raise GeminiError(0, str(e))
     if r.status_code != 200:
         raise GeminiError(r.status_code, r.text[:300])
     parts = r.json()["candidates"][0].get("content", {}).get("parts", [])
@@ -299,10 +302,12 @@ def summarize(messages, requester):
         except GeminiError as e:
             last_error = e
             print(e, file=sys.stderr)
-            if e.status not in (404, 429, 500, 503):
+            if e.status not in (0, 404, 429, 500, 503):
                 break
     if last_error and last_error.status == 429:
         return "سهمیه‌ی رایگان Gemini فعلاً پر شده. یه کم بعد دوباره /chishod بزن."
+    if last_error and last_error.status in (0, 503):
+        return "Gemini الان خیلی شلوغه و جواب نداد 😕 چند دقیقه بعد دوباره /chishod بزن."
     return "نشد خلاصه کنم، یه مشکلی با Gemini پیش اومد. یه کم بعد دوباره امتحان کن."
 
 
@@ -369,12 +374,21 @@ def process(state, updates):
         elif START_RE.match(text):
             reply(msg["chat"]["id"], msg["message_id"], HELP_TEXT)
 
-    # اول همه‌ی پیام‌ها ذخیره بشن، بعد خلاصه، تا پیام‌های همین دور هم حساب بشن
+    # اگه یه نفر چند بار پشت هم /chishod زده، فقط به آخریش جواب بده
+    latest = {}
     for msg, arg in commands:
+        latest[(msg["chat"]["id"], msg.get("from", {}).get("id"))] = (msg, arg)
+
+    # اول همه‌ی پیام‌ها ذخیره بشن، بعد خلاصه، تا پیام‌های همین دور هم حساب بشن.
+    # بعد از هر جواب ذخیره می‌کنیم که اگه اجرا وسطش قطع شد، دوباره جواب نده.
+    if latest:
+        save_state(state)
+    for msg, arg in latest.values():
         try:
             handle_command(state, msg, arg)
         except Exception as e:  # یه دستور خراب نباید بقیه رو خراب کنه
             print(f"command failed: {e}", file=sys.stderr)
+        save_state(state)
 
 
 def prune(state, now=None):

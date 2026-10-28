@@ -18,7 +18,7 @@ permissions:
 jobs:
   run:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -48,6 +48,7 @@ jobs:
 
       # فقط یه commit نگه می‌داریم (force push) تا ریپو بزرگ نشه
       - name: Save data
+        if: always()  # حتی اگه اجرا قطع شد، هر چی تا اونجا ذخیره شده بمونه
         run: |
           if [ -f state.enc ] && ! sha256sum -c before.sha >/dev/null 2>&1; then
             git config user.name "chishod-bot"
