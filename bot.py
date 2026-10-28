@@ -17,6 +17,7 @@
   STATE_FILE       مسیر فایل (پیش‌فرض state.enc)
 """
 
+import html
 import json
 import os
 import re
@@ -46,18 +47,41 @@ HELP_TEXT = (
     "جواب ممکنه یکی دو دقیقه طول بکشه."
 )
 
-SYSTEM_PROMPT = """تو دستیار یه گروه تلگرامی دوستانه‌ای. کارت اینه که پیام‌های گروه رو برای کسی که نبوده خلاصه کنی.
+SYSTEM_PROMPT = """تو دستیار یه گروه تلگرامی دوستانه‌ای. {name} یه مدت نبوده و می‌خواد بدونه تو گروه چی گذشته.
 
-قوانین:
-- به فارسی محاوره‌ای و خودمونی بنویس، کوتاه و مفید.
-- از مارک‌داون (مثل ** یا #) استفاده نکن. برای لیست از «•» استفاده کن.
-- اسم آدم‌ها رو بیار تا معلوم باشه کی چی گفته.
-- چیزی از خودت نساز؛ فقط چیزی که تو پیام‌ها هست.
+دقت:
+- همه‌ی موضوع‌ها رو پوشش بده، حتی کوچیک‌ها؛ چیزی رو جا ننداز.
+- جزئیات رو دقیق بیار: ساعت، روز، مکان، عدد، قیمت، اسم، لینک.
+- بگو کی چی گفته. اگه نظرها فرق داشته، نظر هر کس رو جدا بگو.
+- اگه بحثی به نتیجه نرسیده، صریح بگو هنوز معلوم نیست.
+- فقط چیزی که تو پیام‌ها هست؛ هیچی از خودت نساز و حدس نزن.
+- «فردا» و «امشب» و مثل اینا رو با توجه به زمان پیام معنی کن.
+- طول خلاصه متناسب با پیام‌ها باشه: چند پیام = چند خط، صدها پیام = مفصل‌تر.
 
-ساختار جواب (بخش‌هایی که چیزی ندارن رو ننویس):
-موضوع‌های اصلی: چند خط درباره‌ی اینکه درباره‌ی چی حرف زدن
-تصمیم‌ها و برنامه‌ها: قرارها، تصمیم‌ها، کارهایی که قراره انجام بشه
-مربوط به تو: جاهایی که اسم {name} اومده، ازش سوال شده یا بهش ریپلای شده
+لحن: فارسی محاوره‌ای و خودمونی، مثل یه رفیق که داره برات تعریف می‌کنه.
+
+قالب:
+- فقط تگ‌های <b> و <i> مجازن. مارک‌داون (** یا #) ممنوع.
+- هر بخش یه تیتر <b>پررنگ</b> با ایموجی داره، بعد آیتم‌ها هر کدوم تو یه خط با «•».
+- اسم آدم‌ها رو <b>پررنگ</b> کن.
+- بخشی که چیزی نداره رو کلاً ننویس.
+
+بخش‌ها به این ترتیب:
+
+<b>🗣 چی گذشت</b>
+موضوع‌ها به ترتیب زمانی؛ برای هر موضوع یه • با توضیح و اینکه کی‌ها درگیرش بودن.
+
+<b>✅ تصمیم‌ها و قرارها</b>
+چیزهایی که قطعی شد: کی، کجا، چی، با کی.
+
+<b>📌 مربوط به {name}</b>
+جاهایی که اسمش اومده، ازش سوال شده، بهش ریپلای شده یا ازش کاری خواستن. اگه منتظر جوابشن، بگو.
+
+<b>❓ هنوز باز</b>
+سوال‌ها یا بحث‌هایی که تموم نشده.
+
+<b>😂 حاشیه</b>
+اگه شوخی یا لحظه‌ی باحالی بوده، خیلی کوتاه (حداکثر دو مورد).
 """
 
 
@@ -133,13 +157,37 @@ def split_text(text, limit=TELEGRAM_LIMIT):
     return parts
 
 
-def reply(chat_id, reply_to, text):
+def reply(chat_id, reply_to, text, as_html=False):
     for i, part in enumerate(split_text(text)):
         params = {"chat_id": chat_id, "text": part}
         if i == 0 and reply_to:
             params["reply_parameters"] = {"message_id": reply_to,
                                           "allow_sending_without_reply": True}
-        tg("sendMessage", **params)
+        if as_html:
+            params["parse_mode"] = "HTML"
+        try:
+            tg("sendMessage", **params)
+        except RuntimeError as e:
+            # اگه HTML خراب بود (مثلاً تگ نصفه موند)، ساده بفرست
+            if not as_html or "parse" not in str(e).lower():
+                raise
+            params.pop("parse_mode")
+            params["text"] = html.unescape(re.sub(r"</?[bi]>", "", part))
+            tg("sendMessage", **params)
+
+
+def to_telegram_html(text):
+    """جواب مدل رو امن می‌کنه: فقط <b> و <i> می‌مونن، بقیه escape می‌شن."""
+    text = re.sub(r"^```\w*\n?|\n?```$", "", text.strip())
+    text = re.sub(r"\*\*(.+?)\*\*", r"<b>\1</b>", text)      # اگه مارک‌داون نوشت
+    text = re.sub(r"^#+\s*", "", text, flags=re.MULTILINE)
+    text = html.escape(text, quote=False)
+    return re.sub(r"&lt;(/?)([bi])&gt;", r"<\1\2>", text)
+
+
+def tehran_time(ts, with_date=False):
+    fmt = "%m/%d %H:%M" if with_date else "%H:%M"
+    return time.strftime(fmt, time.gmtime(ts + 3.5 * 3600))
 
 
 def display_name(user):
@@ -200,9 +248,10 @@ def record(state, msg):
 
 
 def format_transcript(messages):
+    multi_day = messages[-1]["date"] - messages[0]["date"] > 20 * 3600
     lines = []
     for m in messages:
-        t = time.strftime("%H:%M", time.gmtime(m["date"] + 3.5 * 3600))  # ساعت تهران
+        t = tehran_time(m["date"], multi_day)
         who = m["name"] + (f" (@{m['user']})" if m.get("user") else "")
         to = f" ← در جواب {m['reply_to']}" if m.get("reply_to") else ""
         lines.append(f"[{t}] {who}{to}: {m['text']}")
@@ -240,11 +289,13 @@ def summarize(messages, requester):
         note = "\n\n(پیام‌ها خیلی زیاد بودن؛ فقط آخرین‌هاشون خلاصه شد.)"
 
     system = SYSTEM_PROMPT.format(name=requester)
-    prompt = f"این پیام‌های گروهه. برای {requester} خلاصه‌شون کن:\n\n{transcript}"
+    now = tehran_time(time.time(), with_date=True)
+    prompt = (f"الان {now} به وقت تهرانه (ساعت‌های زیر هم به وقت تهرانن).\n"
+              f"این پیام‌های گروهه؛ برای {requester} خلاصه‌شون کن:\n\n{transcript}")
     last_error = None
     for model in dict.fromkeys((GEMINI_MODEL, GEMINI_FALLBACK_MODEL)):
         try:
-            return gemini(model, system, prompt) + note
+            return to_telegram_html(gemini(model, system, prompt)) + note
         except GeminiError as e:
             last_error = e
             print(e, file=sys.stderr)
@@ -282,8 +333,13 @@ def handle_command(state, msg, arg):
 
     name = display_name(user)
     summary = summarize(picked, name)
-    header = f"خلاصه‌ی {len(picked)} پیام برای {name}:\n\n"
-    reply(chat_id, msg["message_id"], header + summary)
+    first, last = picked[0]["date"], picked[-1]["date"]
+    multi_day = last - first > 20 * 3600
+    header = (f"📋 <b>خلاصه‌ی گروه برای {html.escape(name)}</b>\n"
+              f"<i>🕐 {tehran_time(first, multi_day)} تا {tehran_time(last, multi_day)}"
+              f" · 💬 {len(picked)} پیام</i>\n"
+              "━━━━━━━━━━━━━━━\n\n")
+    reply(chat_id, msg["message_id"], header + summary, as_html=True)
 
 
 def process(state, updates):
