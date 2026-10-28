@@ -43,45 +43,53 @@ TELEGRAM_LIMIT = 4000               # سقف طول هر پیام تلگرام (
 HELP_TEXT = (
     "سلام! من پیام‌های گروه رو می‌خونم و وقتی بخوای خلاصه‌شون رو بهت می‌گم.\n\n"
     "/chishod - خلاصه‌ی پیام‌ها از آخرین باری که پرسیدی\n"
-    "/chishod 3h - خلاصه‌ی ۳ ساعت اخیر (m دقیقه، h ساعت، d روز)\n\n"
+    "/chishod 3h - خلاصه‌ی ۳ ساعت اخیر (m دقیقه، h ساعت، d روز)\n"
+    "/chishod full - خلاصه‌ی کامل و مفصل (با 3h هم می‌شه: /chishod full 3h)\n\n"
     "جواب ممکنه یکی دو دقیقه طول بکشه."
 )
 
-SYSTEM_PROMPT = """تو دستیار یه گروه تلگرامی دوستانه‌ای. {name} یه مدت نبوده و می‌خواد بدونه تو گروه چی گذشته.
-
-دقت:
-- همه‌ی موضوع‌ها رو پوشش بده، حتی کوچیک‌ها؛ چیزی رو جا ننداز.
-- جزئیات رو دقیق بیار: ساعت، روز، مکان، عدد، قیمت، اسم، لینک.
-- بگو کی چی گفته. اگه نظرها فرق داشته، نظر هر کس رو جدا بگو.
-- اگه بحثی به نتیجه نرسیده، صریح بگو هنوز معلوم نیست.
-- فقط چیزی که تو پیام‌ها هست؛ هیچی از خودت نساز و حدس نزن.
+# قانون‌های مشترک هر دو حالت
+_RULES = """- فقط چیزی که تو پیام‌ها هست؛ هیچی از خودت نساز و حدس نزن.
+- قرارها و تصمیم‌ها رو با جزئیات دقیق بگو: ساعت، روز، مکان، عدد.
 - «فردا» و «امشب» و مثل اینا رو با توجه به زمان پیام معنی کن.
-- طول خلاصه متناسب با پیام‌ها باشه: چند پیام = چند خط، صدها پیام = مفصل‌تر.
+- بگو کی چی گفته، ولی اسم‌ها رو پررنگ نکن.
+- فارسی محاوره‌ای و خودمونی، مثل یه رفیق که داره برات تعریف می‌کنه.
+- فقط تگ <b> مجازه و فقط برای تیترها. مارک‌داون (** یا #) ممنوع.
+- هر آیتم یه خط جدا که با «• » شروع می‌شه."""
 
-لحن: فارسی محاوره‌ای و خودمونی، مثل یه رفیق که داره برات تعریف می‌کنه.
+SHORT_PROMPT = """تو دستیار یه گروه تلگرامی دوستانه‌ای. {name} یه مدت نبوده و می‌خواد سریع بفهمه تو گروه چی گذشته.
+
+""" + _RULES + """
+- مهم‌ترین اتفاق‌ها رو بگو، بین ۶ تا ۱۲ خط بسته به اینکه چقدر پیام بوده (پیام کم = خط کمتر).
+- هر خط یکی دو جمله‌ی کوتاه. چند پیام درباره‌ی یه موضوع = یه خط.
 
 قالب:
-- فقط تگ‌های <b> و <i> مجازن. مارک‌داون (** یا #) ممنوع.
-- هر بخش یه تیتر <b>پررنگ</b> با ایموجی داره، بعد آیتم‌ها هر کدوم تو یه خط با «•».
-- اسم آدم‌ها رو <b>پررنگ</b> کن.
-- بخشی که چیزی نداره رو کلاً ننویس.
+اول لیست اتفاق‌ها، بدون تیتر، به ترتیب زمانی.
+اگه جایی اسم {name} اومده، ازش سوال شده، بهش ریپلای شده یا ازش کاری خواستن، بعد از یه خط خالی:
+<b>📌 مربوط به تو</b>
+و زیرش همون موارد. اگه چیزی نبود، این بخش رو ننویس.
+"""
+
+FULL_PROMPT = """تو دستیار یه گروه تلگرامی دوستانه‌ای. {name} یه مدت نبوده و می‌خواد کامل و مرتب بدونه تو گروه چی گذشته.
+
+""" + _RULES + """
+- همه‌ی موضوع‌ها رو پوشش بده، حتی کوچیک‌ها.
+- اگه نظرها فرق داشته، نظر هر کس رو بگو. اگه بحثی به نتیجه نرسیده، صریح بگو.
+- مرتب و تمیز: هر آیتم یکی دو جمله. اگه یه موضوع چند تا نکته داره، نکته‌ها رو با «  ◦ » زیرش بیار.
+- بین بخش‌ها یه خط خالی بذار. بخشی که چیزی نداره رو ننویس.
 
 بخش‌ها به این ترتیب:
+<b>🗣 موضوع‌ها</b>
+هر موضوع یه آیتم، به ترتیب زمانی: درباره‌ی چی بود، کی‌ها درگیرش بودن، به کجا رسید.
 
-<b>🗣 چی گذشت</b>
-موضوع‌ها به ترتیب زمانی؛ برای هر موضوع یه • با توضیح و اینکه کی‌ها درگیرش بودن.
-
-<b>✅ تصمیم‌ها و قرارها</b>
+<b>✅ قرارها و تصمیم‌ها</b>
 چیزهایی که قطعی شد: کی، کجا، چی، با کی.
 
-<b>📌 مربوط به {name}</b>
-جاهایی که اسمش اومده، ازش سوال شده، بهش ریپلای شده یا ازش کاری خواستن. اگه منتظر جوابشن، بگو.
+<b>📌 مربوط به تو</b>
+جاهایی که اسم {name} اومده، ازش سوال شده، بهش ریپلای شده یا ازش کاری خواستن. اگه منتظر جوابشن، بگو.
 
 <b>❓ هنوز باز</b>
 سوال‌ها یا بحث‌هایی که تموم نشده.
-
-<b>😂 حاشیه</b>
-اگه شوخی یا لحظه‌ی باحالی بوده، خیلی کوتاه (حداکثر دو مورد).
 """
 
 
@@ -197,7 +205,8 @@ def display_name(user):
 
 # ---------- پردازش پیام‌ها ----------
 
-COMMAND_RE = re.compile(r"^/chishod(?:@\w+)?(?:\s+(\S+))?", re.IGNORECASE)
+COMMAND_RE = re.compile(r"^/chishod(?:@\w+)?(?:\s+(.*))?", re.IGNORECASE)
+FULL_WORDS = ("full", "کامل")
 START_RE = re.compile(r"^/(start|help)(?:@\w+)?\b", re.IGNORECASE)
 WINDOW_RE = re.compile(r"^(\d+)\s*([mhd])$", re.IGNORECASE)
 
@@ -283,7 +292,7 @@ class GeminiError(Exception):
         self.status = status
 
 
-def summarize(messages, requester):
+def summarize(messages, requester, full=False):
     transcript = format_transcript(messages)
     note = ""
     if len(transcript) > MAX_PROMPT_CHARS:
@@ -291,7 +300,7 @@ def summarize(messages, requester):
         transcript = transcript[transcript.find("\n") + 1:]
         note = "\n\n(پیام‌ها خیلی زیاد بودن؛ فقط آخرین‌هاشون خلاصه شد.)"
 
-    system = SYSTEM_PROMPT.format(name=requester)
+    system = (FULL_PROMPT if full else SHORT_PROMPT).format(name=requester)
     now = tehran_time(time.time(), with_date=True)
     prompt = (f"الان {now} به وقت تهرانه (ساعت‌های زیر هم به وقت تهرانن).\n"
               f"این پیام‌های گروهه؛ برای {requester} خلاصه‌شون کن:\n\n{transcript}")
@@ -317,11 +326,16 @@ def handle_command(state, msg, arg):
     key = f"{chat_id}:{user.get('id')}"
     now = msg["date"]
 
-    window = parse_window(arg)
-    if arg and window is None:
-        reply(chat_id, msg["message_id"],
-              "نفهمیدم چقدر. مثلاً بنویس /chishod 3h یا /chishod 30m یا /chishod 2d")
-        return
+    full, window = False, None
+    for word in (arg or "").split():
+        if word.lower() in FULL_WORDS:
+            full = True
+        elif parse_window(word):
+            window = parse_window(word)
+        else:
+            reply(chat_id, msg["message_id"],
+                  "نفهمیدم. مثلاً بنویس /chishod 3h یا /chishod full یا /chishod full 2d")
+            return
 
     if window:
         since = now - window
@@ -337,13 +351,12 @@ def handle_command(state, msg, arg):
         return
 
     name = display_name(user)
-    summary = summarize(picked, name)
+    summary = summarize(picked, name, full)
     first, last = picked[0]["date"], picked[-1]["date"]
     multi_day = last - first > 20 * 3600
-    header = (f"📋 <b>خلاصه‌ی گروه برای {html.escape(name)}</b>\n"
-              f"<i>🕐 {tehran_time(first, multi_day)} تا {tehran_time(last, multi_day)}"
-              f" · 💬 {len(picked)} پیام</i>\n"
-              "━━━━━━━━━━━━━━━\n\n")
+    title = "خلاصه‌ی کامل" if full else "خلاصه"
+    header = (f"📋 <b>{title}</b> برای {html.escape(name)} · {len(picked)} پیام · "
+              f"{tehran_time(first, multi_day)} تا {tehran_time(last, multi_day)}\n\n")
     reply(chat_id, msg["message_id"], header + summary, as_html=True)
 
 
